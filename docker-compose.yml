@@ -1,0 +1,169 @@
+version: '3.8'
+
+
+services:
+  # Prefect API Server
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    command: prefect server start
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+    networks:
+      - prefect-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+  # # PostgreSQL para o Prefect
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect_password
+      POSTGRES_DB: prefect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - prefect-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "prefect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # RabbitMQ para simular a fila existente
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=user
+      - RABBITMQ_DEFAULT_PASS=password
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - prefect-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+  # Simulação do SQS usando LocalStack
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+    volumes:
+      - ./localstack-init:/docker-entrypoint-initaws.d
+      - localstack-data:/tmp/localstack
+    networks:
+      - prefect-network
+    restart: always
+
+  # CENÁRIO 1: Prefect Worker para tarefas agendadas (substitui o cron)
+  prefect-agent-scheduler:
+    image: prefecthq/prefect:3-latest
+    command: prefect worker start --pool 'scheduler-pool' -q 'cron'
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    volumes:
+      - ./flows:/app/flows
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    networks:
+      - prefect-network
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    restart: always
+
+  # CENÁRIO 2: Prefect Worker para workers escaláveis horizontalmente
+  # prefect-agent-worker:
+  #   image: prefecthq/prefect:3-latest
+  #   command: prefect worker start --pool 'worker-pool' -q 'worker'
+  #   environment:
+  #     - PREFECT_API_URL=http://prefect-server:4200/api
+  #   volumes:
+  #     - ./flows:/opt/prefect/flows
+  #   depends_on:
+  #     prefect-server:
+  #       condition: service_healthy
+  #   networks:
+  #     - prefect-network
+  #   deploy:
+  #     mode: replicated
+  #     replicas: 3  # Inicia com 3 instâncias, pode ser ajustado dinamicamente
+  #     resources:
+  #       limits:
+  #         cpus: '2'
+  #         memory: 2G
+  #   restart: always
+
+  # CENÁRIO 3: Prefect Worker para big data / ETL
+  # prefect-agent-bigdata:
+  #   image: prefecthq/prefect:3-latest
+  #   command: prefect worker start --pool 'bigdata-pool' -q 'bigdata'
+  #   environment:
+  #     - PREFECT_API_URL=http://prefect-server:4200/api
+  #   volumes:
+  #     - ./flows:/opt/prefect/flows
+  #   depends_on:
+  #     prefect-server:
+  #       condition: service_healthy
+  #   networks:
+  #     - prefect-network
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '8'
+    #       memory: 16G
+    # restart: always
+
+  # Container para Deployment inicial dos flows
+  flow-deployer:
+    build:
+      context: .
+      dockerfile: deployer.Dockerfile
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    volumes:
+      - ./flows:/app/flows
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - prefect-network
+    restart: on-failure
+
+networks:
+  prefect-network:
+    driver: bridge
+
+volumes:
+  prefect-data:
+  postgres-data:
+  rabbitmq-data:
+  localstack-data:
