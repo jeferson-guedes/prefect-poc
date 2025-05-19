@@ -1,6 +1,6 @@
-# Projeto de Migração para Prefect 2.0
+# Prefect 3.0
 
-Este projeto demonstra como migrar um sistema legado de processamento batch, schedulers e workers para o Prefect 2.0, abordando três cenários principais:
+Este projeto demonstra como migrar um sistema legado de processamento batch, schedulers e workers para o Prefect 3.0, abordando três cenários principais:
 
 1. **Projeto de Cron (Schedulers)**: Migração de jobs cron para flows agendados no Prefect
 2. **Projeto de Workers**: Processamento escalável horizontalmente de filas (RabbitMQ/SQS)
@@ -15,11 +15,11 @@ Este projeto demonstra como migrar um sistema legado de processamento batch, sch
 ├── deployment_scripts/         # Scripts para implantação automática
 │   └── deploy_flows.sh         # Script de inicialização e implantação
 ├── flows/                      # Todos os flows do Prefect organizados por cenário
-│   ├── cenario1/               # Fluxos para substituir tarefas cron
+│   ├── cron/               # Fluxos para substituir tarefas cron
 │   │   └── deploy_scheduler_flows.py
-│   ├── cenario2/               # Fluxos para workers e processamento de filas
+│   ├── worker/               # Fluxos para workers e processamento de filas
 │   │   └── deploy_worker_flows.py
-│   └── cenario3/               # Fluxos para ETL e big data
+│   └── bigdata/               # Fluxos para ETL e big data
 │       └── deploy_bigdata_flows.py
 └── localstack-init/            # Scripts de inicialização para o LocalStack (SQS)
 ```
